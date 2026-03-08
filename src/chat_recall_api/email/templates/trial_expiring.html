@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your {app_name} trial is ending soon</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f5;">
+    <tr>
+      <td align="center" style="padding:40px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+          <!-- Header -->
+          <tr>
+            <td style="padding:32px 40px 24px;text-align:center;border-bottom:1px solid #e4e4e7;">
+              <h1 style="margin:0;font-size:24px;font-weight:700;color:#18181b;">{app_name}</h1>
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td style="padding:32px 40px;">
+              <h2 style="margin:0 0 16px;font-size:20px;font-weight:600;color:#18181b;">Your trial ends on {trial_end_date}</h2>
+              <p style="margin:0 0 16px;font-size:15px;line-height:1.6;color:#3f3f46;">
+                You have a few days left on your free trial. To keep access to your conversations and the MCP search tool, subscribe before your trial expires.
+              </p>
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;background-color:#fafafa;border-radius:6px;">
+                <tr>
+                  <td style="padding:16px 20px;">
+                    <p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#18181b;">Plans</p>
+                    <p style="margin:0 0 2px;font-size:14px;color:#3f3f46;">Monthly &mdash; $4.99/mo</p>
+                    <p style="margin:0;font-size:14px;color:#3f3f46;">Annual &mdash; $49.99/yr <span style="color:#16a34a;font-weight:600;">(save 17%)</span></p>
+                  </td>
+                </tr>
+              </table>
+              <!-- CTA -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center">
+                    <a href="{frontend_url}/settings/billing" style="display:inline-block;padding:12px 32px;background-color:#18181b;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;border-radius:6px;">Subscribe Now</a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:24px 0 0;font-size:13px;line-height:1.5;color:#a1a1aa;text-align:center;">
+                If you don't subscribe, your data will be retained for 30 days after the trial ends before permanent deletion.
+              </p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td style="padding:24px 40px;border-top:1px solid #e4e4e7;text-align:center;">
+              <p style="margin:0 0 8px;font-size:13px;color:#a1a1aa;">
+                Questions? Reach us at <a href="mailto:{support_email}" style="color:#3f3f46;text-decoration:underline;">{support_email}</a>
+              </p>
+              <p style="margin:0;font-size:12px;color:#a1a1aa;">
+                <a href="{unsubscribe_url}" style="color:#a1a1aa;text-decoration:underline;">Unsubscribe</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

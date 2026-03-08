@@ -12,7 +12,11 @@ class Settings(BaseSettings):
     nextauth_secret: str = ""
     stripe_secret_key: str = ""
     stripe_webhook_secret: str = ""
+    stripe_monthly_price_id: str = ""
+    stripe_annual_price_id: str = ""
+    stripe_product_id: str = ""
     cors_origins: str = "http://localhost:3000"
+    frontend_url: str = "http://localhost:3002"
     log_level: str = "INFO"
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}

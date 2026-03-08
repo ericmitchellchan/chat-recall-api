@@ -124,6 +124,71 @@ async def get_me(
     return _format_user(user)
 
 
+@router.delete("/account")
+async def delete_account(
+    claims: dict = Depends(get_current_user),
+    conn: AsyncConnection = Depends(get_db),
+) -> dict:
+    """Permanently delete the current user's account and all associated data.
+
+    GDPR/CCPA compliant — deletes all conversations, messages, threads,
+    uploads, subscriptions, and the user record itself. Immediate and irreversible.
+    """
+    conn.row_factory = dict_row
+    user_id = claims["sub"]
+
+    # Verify user exists
+    cur = await conn.execute("SELECT id FROM users WHERE id = %s", (user_id,))
+    user = await cur.fetchone()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    counts: dict[str, int] = {}
+
+    # Delete messages for user's conversations
+    cur = await conn.execute(
+        "DELETE FROM messages WHERE conversation_id IN "
+        "(SELECT id FROM conversations WHERE user_id = %s)",
+        (user_id,),
+    )
+    counts["messages"] = cur.rowcount
+
+    # Delete thread_conversations for user's threads
+    cur = await conn.execute(
+        "DELETE FROM thread_conversations WHERE thread_id IN "
+        "(SELECT id FROM threads WHERE user_id = %s)",
+        (user_id,),
+    )
+    counts["thread_conversations"] = cur.rowcount
+
+    # Delete threads
+    cur = await conn.execute("DELETE FROM threads WHERE user_id = %s", (user_id,))
+    counts["threads"] = cur.rowcount
+
+    # Delete conversations (also clears search index via tsvector)
+    cur = await conn.execute("DELETE FROM conversations WHERE user_id = %s", (user_id,))
+    counts["conversations"] = cur.rowcount
+
+    # Delete uploads
+    cur = await conn.execute("DELETE FROM uploads WHERE user_id = %s", (user_id,))
+    counts["uploads"] = cur.rowcount
+
+    # Delete subscription
+    cur = await conn.execute("DELETE FROM subscriptions WHERE user_id = %s", (user_id,))
+    counts["subscriptions"] = cur.rowcount
+
+    # Delete the user record
+    cur = await conn.execute("DELETE FROM users WHERE id = %s", (user_id,))
+    counts["users"] = cur.rowcount
+
+    await conn.commit()
+
+    return {"deleted": True, "counts": counts}
+
+
 @router.patch("/users/me", response_model=UserResponse)
 async def update_me(
     body: UserUpdate,

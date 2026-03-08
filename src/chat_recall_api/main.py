@@ -7,6 +7,9 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from chat_recall_api.config import get_settings
 from chat_recall_api.deps import close_db_pool, init_db_pool
+from chat_recall_api.routers.billing import router as billing_router
+from chat_recall_api.routers.stats import router as stats_router
+from chat_recall_api.routers.upload import router as upload_router
 from chat_recall_api.routers.users import router as users_router
 
 
@@ -37,6 +40,9 @@ app.add_middleware(
 )
 
 app.include_router(users_router)
+app.include_router(billing_router)
+app.include_router(stats_router)
+app.include_router(upload_router)
 
 
 @app.get("/health")

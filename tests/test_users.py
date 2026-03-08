@@ -345,3 +345,64 @@ def test_update_me_unauthorized(client_with_mocks):
     )
 
     assert response.status_code == 401
+
+
+# ── DELETE /account ──────────────────────────────────────────────────────
+
+
+def test_delete_account_success(client_with_mocks):
+    client, conn, settings = client_with_mocks
+
+    user_row = {"id": "user-uuid"}
+
+    call_count = 0
+    async def mock_execute(sql, params=None):
+        nonlocal call_count
+        call_count += 1
+        m = AsyncMock()
+        if call_count == 1:
+            # SELECT id FROM users
+            m.fetchone = AsyncMock(return_value=user_row)
+        else:
+            # DELETE statements
+            m.rowcount = 0
+        return m
+
+    conn.execute = mock_execute
+
+    token = _make_jwe({"sub": "user-uuid"})
+
+    response = client.delete(
+        "/account",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["deleted"] is True
+    assert "counts" in data
+
+
+def test_delete_account_user_not_found(client_with_mocks):
+    client, conn, settings = client_with_mocks
+
+    mock_cur = AsyncMock()
+    mock_cur.fetchone = AsyncMock(return_value=None)
+    conn.execute = AsyncMock(return_value=mock_cur)
+
+    token = _make_jwe({"sub": "nonexistent-uuid"})
+
+    response = client.delete(
+        "/account",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_delete_account_unauthorized(client_with_mocks):
+    client, conn, settings = client_with_mocks
+
+    response = client.delete("/account")
+
+    assert response.status_code == 401

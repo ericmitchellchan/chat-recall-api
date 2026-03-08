@@ -1,0 +1,5 @@
+{
+  "test_command": ".venv/Scripts/python -m pytest tests/ -x -q --tb=short",
+  "watch_extensions": [".py"],
+  "test_timeout": 120
+}
