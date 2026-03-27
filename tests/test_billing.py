@@ -29,7 +29,7 @@ def billing_settings():
         database_url="postgresql://test:test@localhost/test",
         nextauth_secret=TEST_SECRET,
         stripe_secret_key="sk_test_fake",
-        stripe_webhook_secret="",
+        stripe_webhook_secret="whsec_test",
         stripe_monthly_price_id="price_monthly_test",
         stripe_annual_price_id="price_annual_test",
         stripe_product_id="prod_test",
@@ -256,7 +256,8 @@ def test_cancel_unauthorized(client_with_mocks):
 # ── POST /webhooks/stripe ────────────────────────────────────────────────
 
 
-def test_webhook_checkout_completed(client_with_mocks):
+@patch("chat_recall_api.routers.billing.stripe")
+def test_webhook_checkout_completed(mock_stripe, client_with_mocks):
     client, conn, settings = client_with_mocks
 
     conn.execute = AsyncMock()
@@ -271,11 +272,12 @@ def test_webhook_checkout_completed(client_with_mocks):
             }
         },
     }
+    mock_stripe.Webhook.construct_event.return_value = event
 
     response = client.post(
         "/webhooks/stripe",
         content=json.dumps(event),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "stripe-signature": "t=123,v1=abc"},
     )
 
     assert response.status_code == 200
@@ -284,7 +286,8 @@ def test_webhook_checkout_completed(client_with_mocks):
     assert conn.execute.call_count >= 2
 
 
-def test_webhook_invoice_paid(client_with_mocks):
+@patch("chat_recall_api.routers.billing.stripe")
+def test_webhook_invoice_paid(mock_stripe, client_with_mocks):
     client, conn, settings = client_with_mocks
 
     conn.execute = AsyncMock()
@@ -300,18 +303,20 @@ def test_webhook_invoice_paid(client_with_mocks):
             }
         },
     }
+    mock_stripe.Webhook.construct_event.return_value = event
 
     response = client.post(
         "/webhooks/stripe",
         content=json.dumps(event),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "stripe-signature": "t=123,v1=abc"},
     )
 
     assert response.status_code == 200
     assert conn.execute.call_count >= 2
 
 
-def test_webhook_payment_failed(client_with_mocks):
+@patch("chat_recall_api.routers.billing.stripe")
+def test_webhook_payment_failed(mock_stripe, client_with_mocks):
     client, conn, settings = client_with_mocks
 
     conn.execute = AsyncMock()
@@ -322,18 +327,20 @@ def test_webhook_payment_failed(client_with_mocks):
             "object": {"subscription": "sub_test"},
         },
     }
+    mock_stripe.Webhook.construct_event.return_value = event
 
     response = client.post(
         "/webhooks/stripe",
         content=json.dumps(event),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "stripe-signature": "t=123,v1=abc"},
     )
 
     assert response.status_code == 200
     assert conn.execute.call_count >= 2
 
 
-def test_webhook_subscription_deleted(client_with_mocks):
+@patch("chat_recall_api.routers.billing.stripe")
+def test_webhook_subscription_deleted(mock_stripe, client_with_mocks):
     client, conn, settings = client_with_mocks
 
     conn.execute = AsyncMock()
@@ -344,29 +351,32 @@ def test_webhook_subscription_deleted(client_with_mocks):
             "object": {"id": "sub_test"},
         },
     }
+    mock_stripe.Webhook.construct_event.return_value = event
 
     response = client.post(
         "/webhooks/stripe",
         content=json.dumps(event),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "stripe-signature": "t=123,v1=abc"},
     )
 
     assert response.status_code == 200
     assert conn.execute.call_count >= 2
 
 
-def test_webhook_unhandled_event(client_with_mocks):
+@patch("chat_recall_api.routers.billing.stripe")
+def test_webhook_unhandled_event(mock_stripe, client_with_mocks):
     client, conn, settings = client_with_mocks
 
     event = {
         "type": "some.other.event",
         "data": {"object": {}},
     }
+    mock_stripe.Webhook.construct_event.return_value = event
 
     response = client.post(
         "/webhooks/stripe",
         content=json.dumps(event),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "stripe-signature": "t=123,v1=abc"},
     )
 
     assert response.status_code == 200
@@ -376,9 +386,6 @@ def test_webhook_unhandled_event(client_with_mocks):
 @patch("chat_recall_api.routers.billing.stripe")
 def test_webhook_with_signature_verification(mock_stripe, client_with_mocks):
     client, conn, settings = client_with_mocks
-
-    # Enable webhook secret for this test
-    settings.stripe_webhook_secret = "whsec_test"
 
     mock_stripe.Webhook.construct_event.return_value = {
         "type": "checkout.session.completed",
@@ -404,15 +411,10 @@ def test_webhook_with_signature_verification(mock_stripe, client_with_mocks):
     assert response.status_code == 200
     mock_stripe.Webhook.construct_event.assert_called_once()
 
-    # Reset for other tests
-    settings.stripe_webhook_secret = ""
-
 
 @patch("chat_recall_api.routers.billing.stripe")
 def test_webhook_invalid_signature(mock_stripe, client_with_mocks):
     client, conn, settings = client_with_mocks
-
-    settings.stripe_webhook_secret = "whsec_test"
 
     import stripe as real_stripe
     mock_stripe.SignatureVerificationError = real_stripe.SignatureVerificationError
@@ -430,5 +432,3 @@ def test_webhook_invalid_signature(mock_stripe, client_with_mocks):
     )
 
     assert response.status_code == 400
-
-    settings.stripe_webhook_secret = ""

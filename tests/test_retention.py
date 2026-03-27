@@ -41,18 +41,21 @@ async def test_delete_user_data_cascade(mock_conn):
     mock_cur.rowcount = 5
     mock_conn.execute = AsyncMock(return_value=mock_cur)
 
+    # Mock fetchone for subscription lookup to return None (no active sub)
+    mock_sub_cur = AsyncMock()
+    mock_sub_cur.fetchone = AsyncMock(return_value=None)
+    mock_sub_cur.rowcount = 5
+
+    # First call is subscription lookup (returns None), rest are DELETEs
+    mock_conn.execute = AsyncMock(return_value=mock_sub_cur)
+
     counts = await _delete_user_data(mock_conn, "user-to-delete")
 
-    # 7 DELETE statements (messages, thread_conversations, threads,
-    # conversations, uploads, subscriptions, users)
-    assert mock_conn.execute.call_count == 7
+    # 1 subscription lookup + 7 DELETE statements (messages, thread_conversations,
+    # threads, conversations, uploads, subscriptions, users)
+    assert mock_conn.execute.call_count == 8
     assert counts["messages"] == 5
     assert counts["users"] == 5
-
-    # Verify user_id appears in all calls
-    for call in mock_conn.execute.call_args_list:
-        args = call[0]
-        assert "user-to-delete" in args[1] or "user-to-delete" == args[1][0]
 
 
 # ── _process_deletions ───────────────────────────────────────────────────

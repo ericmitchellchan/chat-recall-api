@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 import json
 import logging
+import time
 from typing import Any
 
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -124,6 +125,13 @@ async def get_current_user(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token missing subject claim",
+        )
+
+    exp = claims.get("exp")
+    if exp and time.time() > exp:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token expired",
         )
 
     return claims

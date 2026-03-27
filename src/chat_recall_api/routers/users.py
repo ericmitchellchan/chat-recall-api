@@ -2,16 +2,22 @@
 
 from __future__ import annotations
 
+import logging
 import uuid
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
+import stripe
 from fastapi import APIRouter, Depends, HTTPException, status
 from psycopg import AsyncConnection
 from psycopg.rows import dict_row
 
 from chat_recall_api.auth import get_current_user, verify_internal_key
+from chat_recall_api.config import Settings, get_settings
 from chat_recall_api.deps import get_db
 from chat_recall_api.schemas.user import UserResponse, UserSync, UserUpdate
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -93,12 +99,14 @@ async def sync_user(
 
         return _format_user(user)
 
-    # Create new user
+    # Create new user with 14-day trial
     user_id = str(uuid.uuid4())
+    trial_ends_at = datetime.now(timezone.utc) + timedelta(days=14)
     cur = await conn.execute(
-        "INSERT INTO users (id, email, name, github_id, google_id, avatar_url) "
-        "VALUES (%s, %s, %s, %s, %s, %s) RETURNING *",
-        (user_id, body.email, body.name, body.github_id, body.google_id, body.avatar_url),
+        "INSERT INTO users (id, email, name, github_id, google_id, avatar_url, "
+        "subscription_status, trial_ends_at) "
+        "VALUES (%s, %s, %s, %s, %s, %s, 'trial', %s) RETURNING *",
+        (user_id, body.email, body.name, body.github_id, body.google_id, body.avatar_url, trial_ends_at),
     )
     user = await cur.fetchone()
     await conn.commit()
@@ -128,6 +136,7 @@ async def get_me(
 async def delete_account(
     claims: dict = Depends(get_current_user),
     conn: AsyncConnection = Depends(get_db),
+    settings: Settings = Depends(get_settings),
 ) -> dict:
     """Permanently delete the current user's account and all associated data.
 
@@ -145,6 +154,19 @@ async def delete_account(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found",
         )
+
+    # Cancel active Stripe subscription before deleting data
+    cur = await conn.execute(
+        "SELECT stripe_subscription_id FROM subscriptions WHERE user_id = %s",
+        (user_id,),
+    )
+    sub = await cur.fetchone()
+    if sub and sub.get("stripe_subscription_id"):
+        try:
+            stripe.api_key = settings.stripe_secret_key
+            stripe.Subscription.cancel(sub["stripe_subscription_id"])
+        except Exception as e:
+            logger.warning("Failed to cancel Stripe subscription %s: %s", sub["stripe_subscription_id"], e)
 
     counts: dict[str, int] = {}
 

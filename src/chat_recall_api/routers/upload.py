@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 MAX_FILE_SIZE = 500 * 1024 * 1024  # 500 MB
+MAX_DECOMPRESSED_SIZE = 1024 * 1024 * 1024  # 1 GB
 
 
 @router.post("/upload", dependencies=[Depends(rate_limit(5, 3600))])
@@ -49,13 +50,21 @@ async def upload_file(
             detail="Only .json and .zip files are accepted",
         )
 
-    # Read file content
-    content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)} MB",
-        )
+    # Read file content in chunks to avoid buffering arbitrarily large uploads
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await file.read(1024 * 1024)  # 1 MB chunks
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024 * 1024)} MB",
+            )
+        chunks.append(chunk)
+    content = b"".join(chunks)
 
     if not content:
         raise HTTPException(
@@ -172,6 +181,12 @@ def _extract_from_zip(content: bytes) -> list[dict]:
 
             # Prefer the shortest path (most likely the root one)
             target = min(candidates, key=len)
+            info = zf.getinfo(target)
+            if info.file_size > MAX_DECOMPRESSED_SIZE:
+                raise ValueError(
+                    f"conversations.json is too large when decompressed "
+                    f"({info.file_size // (1024 * 1024)} MB, max {MAX_DECOMPRESSED_SIZE // (1024 * 1024)} MB)"
+                )
             with zf.open(target) as f:
                 return _parse_json(f.read())
 
