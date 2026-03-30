@@ -51,9 +51,9 @@ async def test_delete_user_data_cascade(mock_conn):
 
     counts = await _delete_user_data(mock_conn, "user-to-delete")
 
-    # 1 subscription lookup + 7 DELETE statements (messages, thread_conversations,
-    # threads, conversations, uploads, subscriptions, users)
-    assert mock_conn.execute.call_count == 8
+    # 1 subscription lookup + 8 DELETE statements (messages, thread_conversations,
+    # threads, sources, conversations, uploads, subscriptions, users)
+    assert mock_conn.execute.call_count == 9
     assert counts["messages"] == 5
     assert counts["users"] == 5
 

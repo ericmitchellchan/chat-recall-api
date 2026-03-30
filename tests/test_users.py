@@ -406,3 +406,119 @@ def test_delete_account_unauthorized(client_with_mocks):
     response = client.delete("/account")
 
     assert response.status_code == 401
+
+
+# ── GET /export ──────────────────────────────────────────────────────────
+
+
+def test_export_success(client_with_mocks):
+    client, conn, settings = client_with_mocks
+
+    user_row = {
+        "id": "user-uuid", "email": "me@example.com", "name": "Me",
+        "github_id": "gh-1", "google_id": None, "avatar_url": None,
+        "created_at": "2024-01-01", "updated_at": None,
+    }
+    conversation_row = {
+        "id": "conv-1", "user_id": "user-uuid", "title": "Hello",
+        "created_at": "2024-01-02", "updated_at": None,
+    }
+    message_row = {
+        "id": "msg-1", "conversation_id": "conv-1", "role": "user",
+        "content_text": "Hi there", "raw_content": '{"parts": ["Hi there"]}',
+        "created_at": "2024-01-02",
+    }
+    thread_row = {
+        "id": "thread-1", "user_id": "user-uuid", "name": "Thread 1",
+        "created_at": "2024-01-03",
+    }
+    thread_conv_row = {
+        "thread_id": "thread-1", "conversation_id": "conv-1",
+    }
+    upload_row = {
+        "id": "upload-1", "user_id": "user-uuid", "filename": "export.zip",
+        "created_at": "2024-01-04",
+    }
+    sub_row = {
+        "id": "sub-1", "user_id": "user-uuid", "status": "active",
+        "stripe_subscription_id": "sub_123",
+    }
+
+    call_count = 0
+
+    async def mock_execute(sql, params=None):
+        nonlocal call_count
+        call_count += 1
+        m = AsyncMock()
+        if call_count == 1:
+            # SELECT * FROM users
+            m.fetchone = AsyncMock(return_value=user_row)
+        elif call_count == 2:
+            # SELECT * FROM conversations
+            m.fetchall = AsyncMock(return_value=[conversation_row])
+        elif call_count == 3:
+            # SELECT m.* FROM messages
+            m.fetchall = AsyncMock(return_value=[message_row])
+        elif call_count == 4:
+            # SELECT * FROM threads
+            m.fetchall = AsyncMock(return_value=[thread_row])
+        elif call_count == 5:
+            # SELECT tc.* FROM thread_conversations
+            m.fetchall = AsyncMock(return_value=[thread_conv_row])
+        elif call_count == 6:
+            # SELECT * FROM uploads
+            m.fetchall = AsyncMock(return_value=[upload_row])
+        elif call_count == 7:
+            # SELECT * FROM subscriptions
+            m.fetchone = AsyncMock(return_value=sub_row)
+        return m
+
+    conn.execute = mock_execute
+
+    token = _make_jwe({"sub": "user-uuid", "email": "me@example.com"})
+
+    response = client.get(
+        "/export",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/json"
+    assert "chat-recall-export.json" in response.headers["content-disposition"]
+
+    data = response.json()
+    assert data["user"]["id"] == "user-uuid"
+    assert len(data["conversations"]) == 1
+    assert data["conversations"][0]["id"] == "conv-1"
+    assert len(data["messages"]) == 1
+    assert data["messages"][0]["content_text"] == "Hi there"
+    assert len(data["threads"]) == 1
+    assert len(data["thread_conversations"]) == 1
+    assert len(data["uploads"]) == 1
+    assert data["subscription"]["status"] == "active"
+    assert "exported_at" in data
+
+
+def test_export_user_not_found(client_with_mocks):
+    client, conn, settings = client_with_mocks
+
+    mock_cur = AsyncMock()
+    mock_cur.fetchone = AsyncMock(return_value=None)
+    conn.execute = AsyncMock(return_value=mock_cur)
+
+    token = _make_jwe({"sub": "nonexistent-uuid"})
+
+    response = client.get(
+        "/export",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 404
+
+
+def test_export_unauthorized(client_with_mocks):
+    client, conn, settings = client_with_mocks
+
+    response = client.get("/export")
+
+    assert response.status_code == 401

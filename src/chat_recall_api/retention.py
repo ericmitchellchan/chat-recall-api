@@ -37,19 +37,25 @@ async def _delete_user_data(conn: AsyncConnection, user_id: str) -> dict[str, in
     """
     conn.row_factory = dict_row
 
-    # Cancel active Stripe subscription before deleting data
+    # Cancel Stripe subscription and delete customer before deleting data
     cur = await conn.execute(
-        "SELECT stripe_subscription_id FROM subscriptions WHERE user_id = %s",
+        "SELECT stripe_customer_id, stripe_subscription_id FROM subscriptions WHERE user_id = %s",
         (user_id,),
     )
     sub = await cur.fetchone()
-    if sub and sub.get("stripe_subscription_id"):
-        try:
-            settings = get_settings()
-            stripe.api_key = settings.stripe_secret_key
-            stripe.Subscription.cancel(sub["stripe_subscription_id"])
-        except Exception as e:
-            logger.warning("Failed to cancel Stripe subscription %s: %s", sub["stripe_subscription_id"], e)
+    if sub:
+        settings = get_settings()
+        stripe.api_key = settings.stripe_secret_key
+        if sub.get("stripe_subscription_id"):
+            try:
+                stripe.Subscription.cancel(sub["stripe_subscription_id"])
+            except Exception as e:
+                logger.warning("Failed to cancel Stripe subscription %s: %s", sub["stripe_subscription_id"], e)
+        if sub.get("stripe_customer_id"):
+            try:
+                stripe.Customer.delete(sub["stripe_customer_id"])
+            except Exception as e:
+                logger.warning("Failed to delete Stripe customer %s: %s", sub["stripe_customer_id"], e)
 
     counts: dict[str, int] = {}
 
@@ -69,6 +75,14 @@ async def _delete_user_data(conn: AsyncConnection, user_id: str) -> dict[str, in
 
     cur = await conn.execute("DELETE FROM threads WHERE user_id = %s", (user_id,))
     counts["threads"] = cur.rowcount
+
+    # Delete orphaned sources for user's conversations
+    cur = await conn.execute(
+        "DELETE FROM sources WHERE id IN "
+        "(SELECT DISTINCT source_id FROM conversations WHERE user_id = %s AND source_id IS NOT NULL)",
+        (user_id,),
+    )
+    counts["sources"] = cur.rowcount
 
     cur = await conn.execute("DELETE FROM conversations WHERE user_id = %s", (user_id,))
     counts["conversations"] = cur.rowcount
